@@ -13,6 +13,8 @@ const TOKEN = process.env.TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 const baseApi = "https://biggamesapi.io/api/clan/oldd";
 const userApi = "https://users.roblox.com/v1/users";
+const avatarAPI = "https://thumbnails.roblox.com/v1/users/avatar-3d?userId=";
+
 const olddLogo =
   "https://cdn.discordapp.com/attachments/1227714444348493946/1227717017243750562/MOSHED-2024-4-10-15-20-40-ezgif.com-crop.gif?ex=66296b92&is=6616f692&hm=86cebc9abb80cf0fc10c347c26eda303d791c1e757d8e273a90eff9b26cc19fe&";
 const goalTypeDescriptions = {
@@ -98,6 +100,7 @@ const discordToRoblox = {
   lightoftwelve: 3434366941,
   dianajigmey: 3281019376,
   hugecatguy: 2989505997,
+  ".vexnation": 3677493935,
 };
 
 client.once("ready", () => {
@@ -106,9 +109,9 @@ client.once("ready", () => {
     .setName("mine")
     .setDescription("Shows your stats");
 
-  const ping = new SlashCommandBuilder()
-    .setName("ping")
-    .setDescription("testing user data");
+  const top10 = new SlashCommandBuilder()
+    .setName("top10")
+    .setDescription("Top 10 players");
 
   const clan = new SlashCommandBuilder()
     .setName("clan")
@@ -121,17 +124,17 @@ client.once("ready", () => {
   const test = new SlashCommandBuilder()
     .setName("test")
     .setDescription("For testing");
+  const top10Command = top10.toJSON();
   const mineCommand = mine.toJSON();
-  const pingCommand = ping.toJSON();
   const clanCommand = clan.toJSON();
   const tasksCommand = tasks.toJSON();
   const testCommand = test.toJSON();
 
   client.application.commands.set([
+    top10Command,
     mineCommand,
     clanCommand,
     tasksCommand,
-    pingCommand,
     testCommand,
   ]);
 });
@@ -139,9 +142,46 @@ client.once("ready", () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  if (interaction.commandName === "ping") {
-    const dcUsername = interaction.user.username;
-    await interaction.reply(`Hello ${dcUsername}`);
+  if (interaction.commandName === "top10") {
+    try {
+      const dcUsername = interaction.user.username;
+      const robloxId = discordToRoblox[dcUsername];
+      const response = await axios.get(baseApi);
+      const robloxResponse = await axios.get(`${userApi}/${robloxId}`);
+      const robloxUsername = robloxResponse.data.displayName;
+
+      const pointContributions =
+        response.data.data.Battles.GoalBattleTwo.PointContributions;
+      pointContributions.sort((a, b) => b.Points - a.Points);
+
+      // Fetch usernames for the top ten players
+      const topTenPlayers = [];
+      for (let i = 0; i < Math.min(pointContributions.length, 10); i++) {
+        const userId = pointContributions[i].UserID;
+        const points = pointContributions[i].Points;
+
+        // Skip users to filter out
+        if (userId === "2543300498" || userId === "1642679118") continue;
+
+        const userResponse = await axios.get(`${userApi}/${userId}`);
+        const username = userResponse.data.displayName;
+        topTenPlayers.push({ username, points });
+      }
+
+      // Format the reply with Discord Markdown
+      let reply = "**Top 10 Players**:\n";
+      topTenPlayers.forEach((player) => {
+        reply += `**${player.username}**: ${player.points}\n`;
+      });
+
+      // Reply with the formatted top ten players
+      await interaction.reply(reply);
+    } catch (error) {
+      console.error("Error fetching top 10 players:", error);
+      await interaction.reply(
+        "An error occurred while fetching the top 10 players."
+      );
+    }
   } else if (interaction.commandName === "tasks") {
     try {
       const dcUsername = interaction.user.username;
@@ -301,30 +341,148 @@ client.on("interactionCreate", async (interaction) => {
       console.error("Error fetching goals:", error);
       await interaction.reply("An error occurred while fetching goals.");
     }
+
+    // Handler for the "/mine" command
   } else if (interaction.commandName === "mine") {
     try {
       const dcUsername = interaction.user.username;
       // Find the Roblox ID corresponding to the Discord username
       const robloxId = discordToRoblox[dcUsername];
+      const response = await axios.get(baseApi);
+      const robloxResponse = await axios.get(`${userApi}/${robloxId}`);
+      const robloxUsername = robloxResponse.data.displayName;
+      const robloxProfileUrl = `https://www.roblox.com/users/${robloxId}/profile`;
+      const avatarResponse = await axios.get(avatarAPI + robloxId);
+      const avatarLink = avatarResponse.data.imageUrl;
+      const avatarURL = avatarLink;
+      const startIndex = avatarURL.indexOf("Avatar-") + "Avatar-".length;
+      const endIndex = avatarURL.indexOf("-Obj");
+      const uniqueIdOfAvatar = avatarURL.substring(startIndex, endIndex);
+      const finalAvatarUrl = `https://tr.rbxcdn.com/30DAY-Avatar-${uniqueIdOfAvatar}-Png/352/352/Avatar/Webp/noFilter`;
+
+      const currentPlace = response.data.data.Battles.GoalBattleTwo.Place;
+      const formattedPlace = JSON.stringify(currentPlace, null, 2);
+
+      const goalData1_Amount =
+        response.data.data.Battles.GoalBattleTwo.Goals[0].Amount;
+      const formattedAmount = JSON.stringify(goalData1_Amount, null, 2);
+
+      const goalData2_Amount =
+        response.data.data.Battles.GoalBattleTwo.Goals[1].Amount;
+      const formattedAmount2 = JSON.stringify(goalData2_Amount, null, 2);
+
+      const goalData3_Amount =
+        response.data.data.Battles.GoalBattleTwo.Goals[2].Amount;
+      const formattedAmount3 = JSON.stringify(goalData3_Amount, null, 2);
+
+      const goalData4_Amount =
+        response.data.data.Battles.GoalBattleTwo.Goals[3].Amount;
+      const formattedAmount4 = JSON.stringify(goalData4_Amount, null, 2);
 
       if (robloxId) {
-        // Get the Roblox username using the Roblox ID
-        const robloxResponse = await axios.get(`${userApi}/${robloxId}`);
-        const robloxUsername = robloxResponse.data.displayName;
-        const robloxProfileUrl = `https://www.roblox.com/users/${robloxId}/profile`;
+        // Function to fetch game stats from Pet Sim 99 API
+        async function fetchGameStats(robloxId, goalNumber) {
+          try {
+            const response = await axios.get(baseApi);
+            const goalData =
+              response.data.data.Battles.GoalBattleTwo.Goals[goalNumber - 1];
+            const goalData_contributions = goalData.Contributions;
+            const goalType = goalData.Type;
+            const goalName = goalTypeDescriptions[goalType];
+            const userContribution = goalData_contributions[`u${robloxId}`];
+            if (userContribution) {
+              return { name: goalName, contribution: userContribution };
+            } else {
+              return { name: goalName, contribution: 0 };
+            }
+          } catch (error) {
+            console.error("Error fetching game stats:", error);
+            throw error;
+          }
+        }
 
-        await interaction.reply({
-          content: `Hello ${dcUsername}, your Roblox username is: [${robloxUsername}](${robloxProfileUrl})`,
-        });
+        // Function to fetch total user contributions from Pet Sim 99 API
+        async function fetchTotalUserContributions() {
+          try {
+            const response = await axios.get(baseApi);
+            const totalUserContributions =
+              response.data.data.Battles.GoalBattleTwo.PointContributions;
+            const userTotalContribution = totalUserContributions.find(
+              (contribution) => contribution.UserID === robloxId
+            );
+            return userTotalContribution ? userTotalContribution.Points : 0;
+          } catch (error) {
+            console.error("Error fetching total user contributions:", error);
+            throw error;
+          }
+        }
+
+        // Fetch game stats for each goal using the Roblox ID
+        const gameStats1 = await fetchGameStats(robloxId, 1);
+        const gameStats2 = await fetchGameStats(robloxId, 2);
+        const gameStats3 = await fetchGameStats(robloxId, 3);
+        const gameStats4 = await fetchGameStats(robloxId, 4);
+
+        // Fetch total user contributions using the Roblox ID
+        const totalUserContribution = await fetchTotalUserContributions();
+
+        // Create the embed
+        const embed = new EmbedBuilder()
+          .setColor(0x0099ff)
+          // .setAuthor({ name: "OLDD Clan", iconURL: olddLogo })
+          .setTitle("OLDD Clan Battle Bot")
+          .setImage(olddLogo)
+          .setDescription(`Real time clan battle stats for ${dcUsername}`)
+          .setThumbnail(finalAvatarUrl)
+          .addFields(
+            { name: "Current Clan Placement", value: formattedPlace },
+            { name: "\u200B", value: "\u200B" },
+            {
+              name: "Roblox Profile Link",
+              value: `[${robloxUsername}](${robloxProfileUrl})`,
+            },
+            {
+              name: gameStats1.name,
+              value: `${gameStats1.contribution} out of ${formattedAmount}`,
+            },
+            {
+              name: gameStats2.name,
+              value: `${gameStats2.contribution} out of ${formattedAmount2}`,
+            },
+            {
+              name: gameStats3.name,
+              value: `${gameStats3.contribution} out of ${formattedAmount3}`,
+            },
+            {
+              name: gameStats4.name,
+              value: `${gameStats4.contribution} out of ${formattedAmount4}`,
+            },
+            {
+              name: "Total Points",
+              value: `${totalUserContribution}`,
+            }
+          )
+          // .setImage(finalAvatarUrl)
+          .setTimestamp()
+          .setFooter({
+            text: "Made by RobDaDev",
+            iconURL:
+              "https://cdn.discordapp.com/attachments/1208099637404114954/1208102070364807258/favicon.jpeg?ex=6622a93b&is=6610343b&hm=dc2f5397addc70d953ca2704af9788339278957c206d401edb0bb2d3c44a1fde&",
+          });
+
+        // Reply with the embed
+        await interaction.reply({ embeds: [embed] });
       } else {
         await interaction.reply("Your Roblox username is not found.");
       }
     } catch (error) {
-      console.error("Error fetching Roblox username:", error);
+      console.error("Error fetching game stats:", error);
       await interaction.reply(
-        "An error occurred while fetching your Roblox username."
+        "An error occurred while fetching your game stats."
       );
     }
+
+    //////////////////////////////end Goal 1/////////////////////////////////////////
   } else if (interaction.commandName === "test") {
     try {
       const response = await axios.get(baseApi);
@@ -543,3 +701,12 @@ client.login(TOKEN);
 // const userNames = await axios.get(userApi);
 // const userData = userNames.displayName;
 // const formattedUserData = JSON.stringify(userData, null, 2);
+
+// const goalData1_contributions =
+//   response.data.data.Battles.GoalBattleTwo.Goals[0].Contributions;
+// const goalData2_contributions =
+//   response.data.data.Battles.GoalBattleTwo.Goals[1].Contributions;
+// const goalData3_contributions =
+//   response.data.data.Battles.GoalBattleTwo.Goals[2].Contributions;
+// const goalData4_contributions =
+//   response.data.data.Battles.GoalBattleTwo.Goals[3].Contributions;
