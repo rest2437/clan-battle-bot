@@ -25,6 +25,7 @@ const goalTypeDescriptions = {
   15: "Collect Enchants",
   20: "Hatch Best Eggs",
   21: "Break Breakables in Best Area",
+  22: "Complete the Classic Obby",
   23: "Complete the Minefield",
   24: "Complete Atlantis minigame",
   25: "Digsite",
@@ -101,6 +102,7 @@ const discordToRoblox = {
   dianajigmey: 3281019376,
   hugecatguy: 2989505997,
   ".vexnation": 3677493935,
+  kimco4087: 955636909,
 };
 
 client.once("ready", () => {
@@ -124,11 +126,17 @@ client.once("ready", () => {
   const test = new SlashCommandBuilder()
     .setName("test")
     .setDescription("For testing");
+
+  const addMe = new SlashCommandBuilder()
+    .setName("addme")
+    .setDescription("Add me on Roblox");
+
   const top10Command = top10.toJSON();
   const mineCommand = mine.toJSON();
   const clanCommand = clan.toJSON();
   const tasksCommand = tasks.toJSON();
   const testCommand = test.toJSON();
+  const addMeCommand = addMe.toJSON();
 
   client.application.commands.set([
     top10Command,
@@ -136,13 +144,93 @@ client.once("ready", () => {
     clanCommand,
     tasksCommand,
     testCommand,
+    addMeCommand,
   ]);
 });
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
+  else if (interaction.commandName === "clan") {
+    try {
+      const dcUsername = interaction.user.username;
+      const response = await axios.get(baseApi);
+      const goalsData = response.data.data.Battles.GoalBattleTwo.Goals;
+      const currentPlace = response.data.data.Battles.GoalBattleTwo.Place;
+      const formattedPlace = JSON.stringify(currentPlace, null, 2);
 
-  if (interaction.commandName === "top10") {
+      // Initialize an array to hold the fields for the embed
+      const embedFields = [];
+
+      // Iterate through each goal data to create embed fields
+      for (const goalData of goalsData) {
+        const { Progress, Amount, Type, Contributions } = goalData;
+        const formattedProgress = JSON.stringify(Progress, null, 2);
+        const formattedAmount = JSON.stringify(Amount, null, 2);
+
+        // Determine the text for the field based on the goal type
+        const goalText = goalTypeDescriptions[Type] || "Unknown Goal";
+
+        // Sort contributions by points (descending order)
+        const sortedContributions = Object.entries(Contributions).sort(
+          (a, b) => b[1] - a[1]
+        );
+
+        // Initialize the value string for the goal field
+        let goalValue = `**${formattedProgress} out of ${formattedAmount}\n**`;
+
+        // Append user contributions to the value string with medals
+        for (const [index, [userId, points]] of sortedContributions.entries()) {
+          // Remove the 'u' prefix from the user ID
+          const cleanUserId = userId.replace(/^u/, "");
+          // Fetch Roblox username using the Roblox API
+          const robloxResponse = await axios.get(`${userApi}/${cleanUserId}`);
+          const robloxUsername = robloxResponse.data.displayName;
+          // Determine medal based on index
+          let medal = "";
+          if (index === 0) medal = "🥇";
+          else if (index === 1) medal = "🥈";
+          else if (index === 2) medal = "🥉";
+          // Add username with points and medal
+          goalValue += ` ${robloxUsername}: ${points} ${medal}\n`;
+        }
+
+        // Push a field object into the embedFields array for the goal
+        embedFields.push({
+          name: goalText,
+          value: goalValue,
+        });
+      }
+
+      // Create the base embed
+      const Embed1 = new EmbedBuilder()
+        .setColor(0x0099ff)
+        .setTitle("OLDD Clan Battle Bot")
+        .setDescription("Real time clan battle stats")
+        .setThumbnail(olddLogo)
+        .addFields(
+          { name: "Current place", value: formattedPlace },
+          { name: "\u200B", value: "\u200B" },
+          // Spread the embedFields array into the addFields method
+          ...embedFields
+        )
+        .setTimestamp()
+        .setFooter({
+          text: "Made by RobDaDev",
+          iconURL:
+            "https://cdn.discordapp.com/attachments/1208099637404114954/1208102070364807258/favicon.jpeg?ex=6622a93b&is=6610343b&hm=dc2f5397addc70d953ca2704af9788339278957c206d401edb0bb2d3c44a1fde&",
+        });
+
+      // Respond with the base embed
+      await interaction.reply({
+        content: `Hello ${dcUsername}`,
+        embeds: [Embed1],
+      });
+      console.log("hi");
+    } catch (error) {
+      console.error("Error fetching clan data:", error);
+      await interaction.reply("An error occurred while fetching clan data.");
+    }
+  } else if (interaction.commandName === "top10") {
     try {
       const dcUsername = interaction.user.username;
       const robloxId = discordToRoblox[dcUsername];
@@ -154,28 +242,63 @@ client.on("interactionCreate", async (interaction) => {
         response.data.data.Battles.GoalBattleTwo.PointContributions;
       pointContributions.sort((a, b) => b.Points - a.Points);
 
+      // Define an array of usernames to filter out
+      const filteredUsernames = ["savagexmummy", "iincx"];
+
       // Fetch usernames for the top ten players
       const topTenPlayers = [];
-      for (let i = 0; i < Math.min(pointContributions.length, 10); i++) {
+      let i = 0;
+      while (topTenPlayers.length < 10 && i < pointContributions.length) {
         const userId = pointContributions[i].UserID;
         const points = pointContributions[i].Points;
 
-        // Skip users to filter out
-        if (userId === "2543300498" || userId === "1642679118") continue;
-
         const userResponse = await axios.get(`${userApi}/${userId}`);
         const username = userResponse.data.displayName;
+
+        // Skip users that are in the filtered list
+        if (filteredUsernames.includes(username)) {
+          i++;
+          continue;
+        }
+
         topTenPlayers.push({ username, points });
+        i++;
       }
 
-      // Format the reply with Discord Markdown
-      let reply = "**Top 10 Players**:\n";
-      topTenPlayers.forEach((player) => {
-        reply += `**${player.username}**: ${player.points}\n`;
-      });
+      // If we couldn't find 10 players, add placeholders
+      while (topTenPlayers.length < 10) {
+        topTenPlayers.push({ username: "Placeholder", points: 0 });
+      }
 
-      // Reply with the formatted top ten players
-      await interaction.reply(reply);
+      // Create a new MessageEmbed
+      const embed = new EmbedBuilder()
+        .setColor(0x0099ff)
+        .setTitle("Top 10 Players")
+        .setTimestamp()
+        .setFooter({
+          text: "Made by RobDaDev",
+          iconURL:
+            "https://cdn.discordapp.com/attachments/1208099637404114954/1208102070364807258/favicon.jpeg?ex=6622a93b&is=6610343b&hm=dc2f5397addc70d953ca2704af9788339278957c206d401edb0bb2d3c44a1fde&",
+        });
+
+      // Add fields for the top ten players
+      topTenPlayers.forEach((player, index) => {
+        let medalEmoji = "";
+        if (index === 0) {
+          medalEmoji = "🥇"; // Gold medal for first place
+        } else if (index === 1) {
+          medalEmoji = "🥈"; // Silver medal for second place
+        } else if (index === 2) {
+          medalEmoji = "🥉"; // Bronze medal for third place
+        }
+
+        embed.addFields({
+          name: `${medalEmoji} ${player.username}`,
+          value: `Points: ${player.points}`,
+        });
+      });
+      // Reply with the embed
+      await interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error("Error fetching top 10 players:", error);
       await interaction.reply(
@@ -190,124 +313,37 @@ client.on("interactionCreate", async (interaction) => {
       const currentPlace = response.data.data.Battles.GoalBattleTwo.Place;
       const formattedPlace = JSON.stringify(currentPlace, null, 2);
 
-      ///////////////////////  GOAL 1  ////////////////////////////
-      const goalsData1 = response.data.data.Battles.GoalBattleTwo.Goals[0];
-      const goalData1_Progress =
-        response.data.data.Battles.GoalBattleTwo.Goals[0].Progress;
-      const goalData1_Amount =
-        response.data.data.Battles.GoalBattleTwo.Goals[0].Amount;
-      let goalsData1_task =
-        response.data.data.Battles.GoalBattleTwo.Goals[0].Type;
-      // data to json
-      const formatteProgress = JSON.stringify(goalData1_Progress, null, 2);
-      const formattedAmount = JSON.stringify(goalData1_Amount, null, 2);
-      let goalText1;
-      for (const key in goalTypeDescriptions) {
-        if (parseInt(key) === goalsData1_task) {
-          goalText1 = goalTypeDescriptions[key];
-          console.log(`${goalsData1_task} is: ${goalText1}`);
-          break;
-        }
-      }
-      ///////////////////////  END GOAL 1  ////////////////////////
-      ///////////////////////  GOAL 2  ////////////////////////////
-      const goalsData2 = response.data.data.Battles.GoalBattleTwo.Goals[1];
-      const goalData2_Progress =
-        response.data.data.Battles.GoalBattleTwo.Goals[1].Progress;
-      const goalData2_Amount =
-        response.data.data.Battles.GoalBattleTwo.Goals[1].Amount;
-      let goalsData2_task =
-        response.data.data.Battles.GoalBattleTwo.Goals[1].Type;
-      // data to json
-      const formatteProgress2 = JSON.stringify(goalData2_Progress, null, 2);
-      const formattedAmount2 = JSON.stringify(goalData2_Amount, null, 2);
-      let goalText2;
-      for (const key in goalTypeDescriptions) {
-        if (parseInt(key) === goalsData2_task) {
-          goalText2 = goalTypeDescriptions[key];
-          console.log(`${goalsData2_task} is: ${goalText2}`);
-          break;
-        }
-      }
-      ///////////////////////  END GOAL 2  ////////////////////////
+      // Initialize an array to hold the fields for the embed
+      const embedFields = [];
 
-      ///////////////////////  GOAL 3  ////////////////////////////
-      const goalsData3 = response.data.data.Battles.GoalBattleTwo.Goals[2];
-      const goalData3_Progress =
-        response.data.data.Battles.GoalBattleTwo.Goals[2].Progress;
-      const goalData3_Amount =
-        response.data.data.Battles.GoalBattleTwo.Goals[2].Amount;
-      let goalsData3_task =
-        response.data.data.Battles.GoalBattleTwo.Goals[2].Type;
-      // data to json
-      const formatteProgress3 = JSON.stringify(goalData3_Progress, null, 2);
-      const formattedAmount3 = JSON.stringify(goalData3_Amount, null, 2);
-      let goalText3;
-      for (const key in goalTypeDescriptions) {
-        if (parseInt(key) === goalsData3_task) {
-          goalText3 = goalTypeDescriptions[key];
-          console.log(`${goalsData3_task} is: ${goalText3}`);
-          break;
-        }
-      }
-      ///////////////////////  END GOAL 3  ////////////////////////
-      ///////////////////////  GOAL 4  ////////////////////////////
-      const goalsData4 = response.data.data.Battles.GoalBattleTwo.Goals[3];
-      const goalData4_Progress =
-        response.data.data.Battles.GoalBattleTwo.Goals[3].Progress;
-      const goalData4_Amount =
-        response.data.data.Battles.GoalBattleTwo.Goals[3].Amount;
-      let goalsData4_task =
-        response.data.data.Battles.GoalBattleTwo.Goals[3].Type;
-      // data to json
-      const formatteProgress4 = JSON.stringify(goalData4_Progress, null, 2);
-      const formattedAmount4 = JSON.stringify(goalData4_Amount, null, 2);
-      let goalText4;
-      for (const key in goalTypeDescriptions) {
-        if (parseInt(key) === goalsData4_task) {
-          goalText4 = goalTypeDescriptions[key];
-          console.log(`${goalsData4_task} is: ${goalText4}`);
-          break;
-        }
-      }
-      ///////////////////////  END GOAL 4  ////////////////////////
+      // Iterate through each goal data to create embed fields
+      for (let i = 0; i < goalsData.length; i++) {
+        const goalData = goalsData[i];
+        const { Progress, Amount, Type } = goalData;
+        const formattedProgress = JSON.stringify(Progress, null, 2);
+        const formattedAmount = JSON.stringify(Amount, null, 2);
 
-      // Format goalsData into a printable format
-      // const formattedData = JSON.stringify(goalsData, null, 2);
-      // const formattedData1 = JSON.stringify(goalsData1, null, 2);
-      // const formattedData2 = JSON.stringify(goalsData2, null, 2);
-      // const formattedData3 = JSON.stringify(goalsData3, null, 2);
-      // const formattedData4 = JSON.stringify(goalsData4, null, 2);
+        // Determine the text for the field based on the goal type
+        const goalText = goalTypeDescriptions[Type] || "Unknown Goal";
 
+        // Push a field object into the embedFields array
+        embedFields.push({
+          name: goalText,
+          value: `${formattedProgress} out of ${formattedAmount}`,
+        });
+      }
+
+      // Create the base embed
       const Embed1 = new EmbedBuilder()
         .setColor(0x0099ff)
         .setTitle("OLDD Clan Battle Bot")
-        // .setAuthor({ name: `Hello ${dcUsername}` })
         .setDescription("Real time clan battle stats")
         .setThumbnail(olddLogo)
         .addFields(
           { name: "Current place", value: formattedPlace },
           { name: "\u200B", value: "\u200B" },
-          {
-            name: goalText1,
-            value: `${formatteProgress} out of ${formattedAmount}`,
-            // inline: true,
-          },
-          {
-            name: goalText2,
-            value: `${formatteProgress2} out of ${formattedAmount2}`,
-            // inline: true,
-          },
-          {
-            name: goalText3,
-            value: `${formatteProgress3} out of ${formattedAmount3}`,
-            // inline: true,
-          },
-          {
-            name: goalText4,
-            value: `${formatteProgress4} out of ${formattedAmount4}`,
-            // inline: true,
-          }
+          // Spread the embedFields array into the addFields method
+          ...embedFields
         )
         .setTimestamp()
         .setFooter({
@@ -315,10 +351,11 @@ client.on("interactionCreate", async (interaction) => {
           iconURL:
             "https://cdn.discordapp.com/attachments/1208099637404114954/1208102070364807258/favicon.jpeg?ex=6622a93b&is=6610343b&hm=dc2f5397addc70d953ca2704af9788339278957c206d401edb0bb2d3c44a1fde&",
         });
-      // Respond with the formatted data
+
+      // Initialize embedToSend variable
       let embedToSend;
 
-      // Check if the username is robdadev
+      // Check the username to determine which embed to use
       if (interaction.user.username === "savagexmummy") {
         // Use Embed 3
         embedToSend = new EmbedBuilder()
@@ -341,8 +378,6 @@ client.on("interactionCreate", async (interaction) => {
       console.error("Error fetching goals:", error);
       await interaction.reply("An error occurred while fetching goals.");
     }
-
-    // Handler for the "/mine" command
   } else if (interaction.commandName === "mine") {
     try {
       const dcUsername = interaction.user.username;
@@ -483,6 +518,37 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     //////////////////////////////end Goal 1/////////////////////////////////////////
+  } else if (interaction.commandName === "addme") {
+    // Your logic for the "addme" command goes here
+    // For example, you can add the user to a list or perform any other action.
+    const dcUsername = interaction.user.username;
+    // Find the Roblox ID corresponding to the Discord username
+    const robloxId = discordToRoblox[dcUsername];
+    const response = await axios.get(baseApi);
+    const robloxResponse = await axios.get(`${userApi}/${robloxId}`);
+    const robloxUsername = robloxResponse.data.displayName;
+    const robloxProfileUrl = `https://www.roblox.com/users/${robloxId}/profile`;
+    const avatarResponse = await axios.get(avatarAPI + robloxId);
+    const avatarLink = avatarResponse.data.imageUrl;
+    const avatarURL = avatarLink;
+    const startIndex = avatarURL.indexOf("Avatar-") + "Avatar-".length;
+    const endIndex = avatarURL.indexOf("-Obj");
+    const uniqueIdOfAvatar = avatarURL.substring(startIndex, endIndex);
+    const finalAvatarUrl = `https://tr.rbxcdn.com/30DAY-Avatar-${uniqueIdOfAvatar}-Png/352/352/Avatar/Webp/noFilter`;
+
+    const addmeEmbed = new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setTitle(`Add ${robloxUsername} on Roblox!`)
+      .setDescription(`Click [here](${robloxProfileUrl}) to add me on Roblox!`)
+      .setImage(finalAvatarUrl) // Replace this with your profile photo URL
+      .setTimestamp()
+      .setFooter({
+        text: "Made by RobDaDev",
+        iconURL:
+          "https://cdn.discordapp.com/attachments/1208099637404114954/1208102070364807258/favicon.jpeg?ex=6622a93b&is=6610343b&hm=dc2f5397addc70d953ca2704af9788339278957c206d401edb0bb2d3c44a1fde&",
+      });
+    // Reply to the interaction with the embed
+    await interaction.reply({ embeds: [addmeEmbed] });
   } else if (interaction.commandName === "test") {
     try {
       const response = await axios.get(baseApi);
@@ -547,137 +613,65 @@ client.on("interactionCreate", async (interaction) => {
 async function fetchDataAndPost() {
   try {
     const response = await axios.get(baseApi);
-    const goalsData1 = response.data.data.Battles.GoalBattleTwo.Goals[0].Type;
-    const goalsData2 = response.data.data.Battles.GoalBattleTwo.Goals[1].Type;
-    const goalsData3 = response.data.data.Battles.GoalBattleTwo.Goals[2].Type;
-    const goalsData4 = response.data.data.Battles.GoalBattleTwo.Goals[3].Type;
+    const goalsData = response.data.data.Battles.GoalBattleTwo.Goals;
     const currentPlace = response.data.data.Battles.GoalBattleTwo.Place;
     const formattedPlace = JSON.stringify(currentPlace, null, 2);
 
-    const goalData1_Progress =
-      response.data.data.Battles.GoalBattleTwo.Goals[0].Progress;
-    const goalData1_Amount =
-      response.data.data.Battles.GoalBattleTwo.Goals[0].Amount;
-    const formatteProgress1 = JSON.stringify(goalData1_Progress, null, 2);
-    const formattedAmount1 = JSON.stringify(goalData1_Amount, null, 2);
+    const embedFields = [];
 
-    const goalData2_Progress =
-      response.data.data.Battles.GoalBattleTwo.Goals[1].Progress;
-    const goalData2_Amount =
-      response.data.data.Battles.GoalBattleTwo.Goals[1].Amount;
-    const formatteProgress2 = JSON.stringify(goalData2_Progress, null, 2);
-    const formattedAmount2 = JSON.stringify(goalData2_Amount, null, 2);
+    for (let i = 0; i < goalsData.length; i++) {
+      const { Type, Progress, Amount } = goalsData[i];
+      const goalText = goalTypeDescriptions[Type] || "Unknown Goal";
+      const formattedProgress = JSON.stringify(Progress, null, 2);
+      const formattedAmount = JSON.stringify(Amount, null, 2);
 
-    const goalData3_Progress =
-      response.data.data.Battles.GoalBattleTwo.Goals[2].Progress;
-    const goalData3_Amount =
-      response.data.data.Battles.GoalBattleTwo.Goals[2].Amount;
-    const formatteProgress3 = JSON.stringify(goalData3_Progress, null, 2);
-    const formattedAmount3 = JSON.stringify(goalData3_Amount, null, 2);
-
-    const goalData4_Progress =
-      response.data.data.Battles.GoalBattleTwo.Goals[3].Progress;
-    const goalData4_Amount =
-      response.data.data.Battles.GoalBattleTwo.Goals[3].Amount;
-    const formatteProgress4 = JSON.stringify(goalData4_Progress, null, 2);
-    const formattedAmount4 = JSON.stringify(goalData4_Amount, null, 2);
-
-    let goalText1, goalText2, goalText3, goalText4;
-
-    for (const key in goalTypeDescriptions) {
-      if (parseInt(key) === goalsData1) {
-        goalText1 = goalTypeDescriptions[key];
-        break;
-      }
-    }
-
-    for (const key in goalTypeDescriptions) {
-      if (parseInt(key) === goalsData2) {
-        goalText2 = goalTypeDescriptions[key];
-        break;
-      }
-    }
-
-    for (const key in goalTypeDescriptions) {
-      if (parseInt(key) === goalsData3) {
-        goalText3 = goalTypeDescriptions[key];
-        break;
-      }
-    }
-
-    for (const key in goalTypeDescriptions) {
-      if (parseInt(key) === goalsData4) {
-        goalText4 = goalTypeDescriptions[key];
-        break;
-      }
-    }
-
-    if (
-      prevGoalText1 !== goalText1 ||
-      prevGoalText2 !== goalText2 ||
-      prevGoalText3 !== goalText3 ||
-      prevGoalText4 !== goalText4
-    ) {
-      // Update previous values
-      prevGoalText1 = goalText1;
-      prevGoalText2 = goalText2;
-      prevGoalText3 = goalText3;
-      prevGoalText4 = goalText4;
-
-      const Embed1 = new EmbedBuilder()
-        .setColor(0x0099ff)
-        .setTitle("OLDD Clan Battle Bot")
-        .setDescription("Real time clan battle stats")
-        .setThumbnail(olddLogo)
-        .addFields(
-          { name: "Current place", value: formattedPlace },
-          { name: "\u200B", value: "\u200B" },
-          {
-            name: goalText1,
-            value: `${formatteProgress1} out of ${formattedAmount1}`,
-            // inline: true,
-          },
-          {
-            name: goalText2,
-            value: `${formatteProgress2} out of ${formattedAmount2}`,
-            // inline: true,
-          },
-          {
-            name: goalText3,
-            value: `${formatteProgress3} out of ${formattedAmount3}`,
-            // inline: true,
-          },
-          {
-            name: goalText4,
-            value: `${formatteProgress4} out of ${formattedAmount4}`,
-            // inline: true,
-          }
-        )
-        .setTimestamp()
-        .setFooter({
-          text: "Made by RobDaDev",
-          iconURL:
-            "https://cdn.discordapp.com/attachments/1208099637404114954/1208102070364807258/favicon.jpeg?ex=6622a93b&is=6610343b&hm=dc2f5397addc70d953ca2704af9788339278957c206d401edb0bb2d3c44a1fde&",
-        });
-
-      // Post the data to a specific channel or wherever you want
-      const channel = await client.channels.fetch("1229240263617019954");
-
-      // If there is a previous message, delete it
-      if (previousMessageId) {
-        const previousMessage = await channel.messages.fetch(previousMessageId);
-        await previousMessage.delete();
-        console.log("updated");
-      }
-
-      // Send the new message and store its ID
-      const newMessage = await channel.send({
-        content: "Automatically posted update:",
-        embeds: [Embed1],
+      embedFields.push({
+        name: goalText,
+        value: `${formattedProgress} out of ${formattedAmount}`,
       });
-      previousMessageId = newMessage.id;
     }
-    console.log("checked");
+
+    const Embed1 = new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setTitle("OLDD Clan Battle Bot")
+      .setDescription("Real time clan battle stats")
+      .setThumbnail(olddLogo)
+      .addFields(
+        { name: "Current place", value: formattedPlace },
+        { name: "\u200B", value: "\u200B" },
+        ...embedFields
+      )
+      .setTimestamp()
+      .setFooter({
+        text: "Made by RobDaDev",
+        iconURL:
+          "https://cdn.discordapp.com/attachments/1208099637404114954/1208102070364807258/favicon.jpeg?ex=6622a93b&is=6610343b&hm=dc2f5397addc70d953ca2704af9788339278957c206d401edb0bb2d3c44a1fde&",
+      });
+
+    const channel = await client.channels.fetch("1229240263617019954");
+    const messages = await channel.messages.fetch();
+    const botMessages = messages.filter(
+      (msg) => msg.author.id === client.user.id
+    );
+
+    await Promise.all(
+      messages.map(async (msg) => {
+        try {
+          await msg.delete();
+          console.log(`Deleted message with ID: ${msg.id}`);
+        } catch (error) {
+          console.error(`Error deleting message with ID ${msg.id}:`, error);
+        }
+      })
+    );
+
+    const newMessage = await channel.send({
+      content: "Automatically posted update:",
+      embeds: [Embed1],
+    });
+    previousMessageId = newMessage.id;
+
+    console.log("updated");
   } catch (error) {
     console.error("Error fetching and posting data:", error);
   }
