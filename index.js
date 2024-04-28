@@ -610,7 +610,7 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 });
-async function fetchDataAndPost() {
+async function postClanStats() {
   try {
     const response = await axios.get(baseApi);
     const goalsData = response.data.data.Battles.GoalBattleTwo.Goals;
@@ -620,14 +620,31 @@ async function fetchDataAndPost() {
     const embedFields = [];
 
     for (let i = 0; i < goalsData.length; i++) {
-      const { Type, Progress, Amount } = goalsData[i];
+      const { Type, Progress, Amount, Contributions } = goalsData[i];
       const goalText = goalTypeDescriptions[Type] || "Unknown Goal";
       const formattedProgress = JSON.stringify(Progress, null, 2);
       const formattedAmount = JSON.stringify(Amount, null, 2);
 
+      let goalValue = `**${formattedProgress} out of ${formattedAmount}\n**`;
+
+      // Append user contributions to the value string with medals
+      const sortedContributions = Object.entries(Contributions).sort(
+        (a, b) => b[1] - a[1]
+      );
+      for (const [index, [userId, points]] of sortedContributions.entries()) {
+        const cleanUserId = userId.replace(/^u/, "");
+        const robloxResponse = await axios.get(`${userApi}/${cleanUserId}`);
+        const robloxUsername = robloxResponse.data.displayName;
+        let medal = "";
+        if (index === 0) medal = "🥇";
+        else if (index === 1) medal = "🥈";
+        else if (index === 2) medal = "🥉";
+        goalValue += ` ${robloxUsername}: ${points} ${medal}\n`;
+      }
+
       embedFields.push({
         name: goalText,
-        value: `${formattedProgress} out of ${formattedAmount}`,
+        value: goalValue,
       });
     }
 
@@ -648,7 +665,7 @@ async function fetchDataAndPost() {
           "https://cdn.discordapp.com/attachments/1208099637404114954/1208102070364807258/favicon.jpeg?ex=6622a93b&is=6610343b&hm=dc2f5397addc70d953ca2704af9788339278957c206d401edb0bb2d3c44a1fde&",
       });
 
-    const channel = await client.channels.fetch("1229240263617019954");
+    const channel = await client.channels.fetch("1229240263617019954"); // Replace with your channel ID
     const messages = await channel.messages.fetch();
     const botMessages = messages.filter(
       (msg) => msg.author.id === client.user.id
@@ -669,17 +686,18 @@ async function fetchDataAndPost() {
       content: "Automatically posted update:",
       embeds: [Embed1],
     });
-    previousMessageId = newMessage.id;
 
-    console.log("updated");
+    console.log("Updated clan stats");
   } catch (error) {
-    console.error("Error fetching and posting data:", error);
+    console.error("Error fetching and posting clan stats:", error);
   }
 }
 
-// Run the function every 60 seconds
-setInterval(fetchDataAndPost, 60000);
+// Call the function initially
+postClanStats();
 
+// Set interval to call the function every 60 seconds
+setInterval(postClanStats, 60000);
 client.login(TOKEN);
 
 // users
